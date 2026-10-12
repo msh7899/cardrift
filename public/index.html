@@ -123,6 +123,10 @@ input{user-select:text;-webkit-user-select:text}
 .lbr .sc{flex:none;font-weight:800;color:var(--cyan);direction:rtl}
 .lbr.top{color:var(--gold)}.lbr.top .sc{color:var(--gold)}
 .lbr.me{background:rgba(255,46,147,.18);border-radius:4px}
+/* ---- Open world (free map) ---- */
+body.free #hud,body.free #drift{display:none!important}
+#freeTag{position:fixed;top:max(12px,env(safe-area-inset-top));left:0;right:0;text-align:center;font-size:14px;font-weight:800;color:var(--cyan);opacity:.85;pointer-events:none;display:none;text-shadow:0 0 12px rgba(0,0,0,.9)}
+body.free[data-m=drift][data-s=play] #freeTag{display:block}
 </style>
 </head>
 <body data-m="hub">
@@ -134,6 +138,7 @@ input{user-select:text;-webkit-user-select:text}
   <div class="b" style="align-items:flex-end"><small>زمان</small><b id="tm">۳۵٫۰</b></div>
 </div>
 <div id="drift"><span id="dp">0</span><span id="dm"></span></div>
+<div id="freeTag">🌍 مپ آزاد · بدون امتیاز و رکورد</div>
 <div id="toast"></div>
 
 <div class="ov h" id="menu"><div class="card">
@@ -150,8 +155,8 @@ input{user-select:text;-webkit-user-select:text}
 
 <div class="ov h" id="nm"><div class="card">
   <h1 style="font-size:34px">نام بازیکن</h1>
-  <p>یه اسم خاص برای خودت انتخاب کن تا امتیازت تو جدول برترین‌ها ثبت بشه. اسم رو بعداً نمی‌تونی تغییر بدی.</p>
-  <input id="nmIn" maxlength="16" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="اسم بازیکن">
+  <p>یک نام یکتا انتخاب کن تا امتیازهایت در جدول برترین‌ها ثبت شود. نام بعداً قابل تغییر نیست.</p>
+  <input id="nmIn" maxlength="16" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="نام تو">
   <div id="nmErr"></div>
   <button class="go" id="nmGo">ثبت و ورود</button>
 </div></div>
@@ -256,7 +261,7 @@ function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight
 addEventListener('resize',resize);resize();
 
 /* ---------- Track ---------- */
-let HW=120,TH;const WS=2800,C=WS/2,N=360,MAXV=600,CP=N/8;
+let HW=120,TH,FREE=false;const WS=2800,C=WS/2,N=360,MAXV=600,CP=N/8;
 const cl=[];
 /* هر زمین: نام، توضیح، نیم‌عرض جاده (hw)، فاز شروع (ph)، تابع مسیر fn(t) و رنگ‌ها (th)
    برای افزودن زمین جدید یک آبجکت دیگر به این آرایه اضافه کن. */
@@ -275,8 +280,39 @@ const TRACKS=[
     th:{grass:'#0e2438',b:[120,200,255],sq:'rgba(255,255,255,.06)',road:'#26303d',k1:'#e8f4ff',k2:'#2e7dff'}},
   {name:'دایره‌ی دریفت',desc:'حلقه‌ی خیلی پهن؛ بی‌وقفه دور بزن و ضریب ×۱۰ را نگه دار.',hw:200,ph:0,
     fn:t=>[Math.cos(t)*760,Math.sin(t)*760],
-    th:{grass:'#12301f',b:[60,200,110],sq:'rgba(255,210,63,.07)',road:'#2b2a2c',k1:'#fff',k2:'#ff7a1a'}}
+    th:{grass:'#12301f',b:[60,200,110],sq:'rgba(255,210,63,.07)',road:'#2b2a2c',k1:'#fff',k2:'#ff7a1a'}},
+  {name:'مپ آزاد',free:true,desc:'میدان باز و بدون جاده؛ آزادانه بین مخروط‌ها و ستون‌ها دریفت بزن و بچرخ. بدون زمان، امتیاز و رکورد.',hw:0,ph:0,
+    th:{grass:'#1d1f2c',b:[110,120,170],sq:'rgba(255,255,255,.035)',road:'#2a2c3a',k1:'#eee',k2:'#ff7a1a'}}
 ];
+
+/* ---------- Open world layout (مپ آزاد) ---------- */
+let FREEDATA=null;
+function genFree(){
+  if(FREEDATA)return FREEDATA;
+  const co=[],pl=[];
+  const addC=(x,y)=>co.push({x:C+x,y:C+y});
+  // ستون‌های ثابت
+  [[0,0],[-620,0],[620,0],[0,-640],[-330,-330],[330,-330],[-330,330],[330,330],[0,820]].forEach(p=>pl.push({x:C+p[0],y:C+p[1],r:24}));
+  // حلقه‌ی دونات دور ستون وسط (با یک دهانه‌ی ورودی)
+  for(let i=0;i<32;i++){const a=i/32*Math.PI*2;if(a>Math.PI*.42&&a<Math.PI*.58)continue;addC(Math.cos(a)*240,Math.sin(a)*240)}
+  // اسلالوم‌ها
+  for(let y=-800;y<=800;y+=110)addC(-950,y);
+  for(let y=-800;y<=800;y+=90)addC(950,y);
+  for(let x=-600;x<=600;x+=100){addC(x,-1100);addC(x,1180)}
+  // خوشه‌های مخروط در چهار گوشه
+  let s=11;const rnd=()=>(s=s*16807%2147483647)/2147483647;
+  for(const[cx,cy]of[[-450,-900],[450,-900],[-450,900],[450,900]])
+    for(let i=0;i<4;i++)for(let j=0;j<4;j++)addC(cx+(i-1.5)*100+(rnd()-.5)*30,cy+(j-1.5)*100+(rnd()-.5)*30);
+  // مخروط‌های پراکنده (جانمایی تصادفی ولی ثابت)
+  const all=()=>co.concat(pl);
+  for(let n=0,t=0;n<70&&t<4000;t++){
+    const x=(rnd()*2-1)*(C-170),y=(rnd()*2-1)*(C-170);
+    if(Math.hypot(x,y-470)<260)continue;                 // محل شروع
+    if(all().some(o=>Math.hypot(o.x-C-x,o.y-C-y)<85))continue;
+    addC(x,y);n++;
+  }
+  return FREEDATA={cones:co,pillars:pl};
+}
 const gr=document.createElement('canvas');gr.width=gr.height=WS;const g=gr.getContext('2d');
 const pathOn=c=>{c.beginPath();cl.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.closePath()};
 function buildGround(){
@@ -284,6 +320,7 @@ function buildGround(){
   let s=7;const rnd=()=>(s=s*16807%2147483647)/2147483647;
   for(let i=0;i<240;i++){g.fillStyle=`rgba(${TH.b},${.05+rnd()*.07})`;g.beginPath();g.arc(rnd()*WS,rnd()*WS,20+rnd()*100,0,7);g.fill()}
   for(let i=0;i<70;i++){g.fillStyle=TH.sq;const x=rnd()*WS,y=rnd()*WS,z=30+rnd()*60;g.fillRect(x,y,z,z)}
+  if(FREE)return drawFreeMarks();
   g.lineJoin='round';g.setLineDash([]);
   pathOn(g);g.strokeStyle=TH.k1;g.lineWidth=HW*2+34;g.stroke();
   g.strokeStyle=TH.k2;g.setLineDash([36,36]);g.stroke();
@@ -295,11 +332,26 @@ function buildGround(){
   g.restore();
 }
 
+function drawFreeMarks(){
+  g.lineJoin='round';g.setLineDash([]);
+  g.strokeStyle='rgba(255,255,255,.06)';g.lineWidth=3;
+  for(let v=80;v<=WS-80;v+=200){g.beginPath();g.moveTo(v,80);g.lineTo(v,WS-80);g.moveTo(80,v);g.lineTo(WS-80,v);g.stroke()}
+  g.strokeStyle='rgba(255,255,255,.05)';g.lineWidth=46;
+  for(const x of[C-950,C+950]){g.beginPath();g.moveTo(x,C-880);g.lineTo(x,C+880);g.stroke()}
+  g.fillStyle='rgba(255,46,147,.1)';g.beginPath();g.arc(C,C,240,0,7);g.fill();
+  g.strokeStyle='rgba(255,255,255,.28)';g.lineWidth=5;g.setLineDash([30,26]);g.beginPath();g.arc(C,C,240,0,7);g.stroke();
+  g.setLineDash([]);
+  g.strokeStyle=TH.k1;g.lineWidth=22;g.strokeRect(70,70,WS-140,WS-140);
+  g.strokeStyle=TH.k2;g.lineWidth=22;g.setLineDash([36,36]);g.strokeRect(70,70,WS-140,WS-140);
+  g.setLineDash([]);
+}
+
 /* ---------- State ---------- */
 const car={x:0,y:0,a:0,vx:0,vy:0,steer:0,slide:false};
-const cones=[],parts=[],texts=[],prev=[null,null];
+const cones=[],pillars=[],parts=[],texts=[],prev=[null,null];
 function buildCones(){
-  cones.length=0;
+  cones.length=0;pillars.length=0;
+  if(FREE){const d=genFree();d.cones.forEach(c=>cones.push({x:c.x,y:c.y,ox:c.x,oy:c.y,vx:0,vy:0,r:0,vr:0,hit:0}));d.pillars.forEach(p=>pillars.push(p));return}
   for(let i=0;i<N;i+=5)for(const sd of[-1,1]){
     const p=cl[i],q=cl[(i+1)%N],a=Math.atan2(q.y-p.y,q.x-p.x),o=(HW+32)*sd;
     const x=p.x-Math.sin(a)*o,y=p.y+Math.cos(a)*o;
@@ -314,7 +366,7 @@ const cam={x:0,y:0,z:1};
 $('bs').textContent='رکورد: '+NF(best);
 
 function reset(){
-  const p=cl[0],q=cl[1];
+  const p=FREE?{x:C,y:C+470}:cl[0],q=FREE?{x:C,y:C+400}:cl[1];
   Object.assign(car,{x:p.x,y:p.y,a:Math.atan2(q.y-p.y,q.x-p.x),vx:0,vy:0,steer:0,slide:false});
   score=pending=0;time=35;lap=1;next=1;mult=1;chainT=gap=0;hits=0;driftOn=false;
   parts.length=0;texts.length=0;prev[0]=prev[1]=null;
@@ -411,8 +463,8 @@ function update(dt){
   vF=car.vx*fx+car.vy*fy;let vR=car.vx*rx+car.vy*ry;
 
   let bi=0,bd=1e12;
-  for(let i=0;i<N;i++){const dx=car.x-cl[i].x,dy=car.y-cl[i].y,d=dx*dx+dy*dy;if(d<bd){bd=d;bi=i}}
-  const on=Math.sqrt(bd)<HW+12;
+  if(!FREE)for(let i=0;i<N;i++){const dx=car.x-cl[i].x,dy=car.y-cl[i].y,d=dx*dx+dy*dy;if(d<bd){bd=d;bi=i}}
+  const on=FREE||Math.sqrt(bd)<HW+12;
 
   if(gas)vF+=640*(1-Math.max(vF,0)/MAXV)*dt;
   if(br)vF-=(vF>0?1000:380)*dt;
@@ -431,6 +483,16 @@ function update(dt){
   if(car.x<80||car.x>WS-80||car.y<80||car.y>WS-80){
     if(sp>200&&state==='play'){lose();shake=14}
     car.x=Math.max(80,Math.min(WS-80,car.x));car.y=Math.max(80,Math.min(WS-80,car.y));car.vx*=-.4;car.vy*=-.4;
+  }
+
+  /* ستون‌های ثابت (فقط مپ آزاد) */
+  for(const p of pillars){
+    const dx=car.x-p.x,dy=car.y-p.y,d=Math.hypot(dx,dy)||1,R=p.r+20;
+    if(d<R){
+      const nx=dx/d,ny=dy/d;car.x=p.x+nx*R;car.y=p.y+ny*R;
+      const vn=car.vx*nx+car.vy*ny;
+      if(vn<0){car.vx-=1.6*vn*nx;car.vy-=1.6*vn*ny;car.vx*=.92;car.vy*=.92;if(-vn>140)shake=Math.max(shake,Math.min(14,-vn/30))}
+    }
   }
 
   /* skid + smoke */
@@ -453,7 +515,7 @@ function update(dt){
       const d=Math.sqrt(d2)||1;
       c.vx=car.vx*1.15+dx/d*130;c.vy=car.vy*1.15+dy/d*130;c.vr=(Math.random()-.5)*22;
       car.vx*=.994;car.vy*=.994;
-      if(!c.hit&&state==='play'){c.hit=1;hits++;score+=25;texts.push({x:c.x,y:c.y,t:0,s:'+۲۵'})}
+      if(!c.hit&&state==='play'&&!FREE){c.hit=1;hits++;score+=25;texts.push({x:c.x,y:c.y,t:0,s:'+۲۵'})}
     }
     if(c.vx||c.vy||c.vr){
       c.x+=c.vx*dt;c.y+=c.vy*dt;c.r+=c.vr*dt;const f=Math.exp(-2.2*dt);c.vx*=f;c.vy*=f;c.vr*=f;
@@ -462,7 +524,7 @@ function update(dt){
   }
 
   /* game rules */
-  if(state==='play'){
+  if(state==='play'&&!FREE){
     time-=dt;
     const drifting=car.slide&&sp>160&&on;
     if(drifting){
@@ -528,7 +590,7 @@ function render(dt,sp){
   ctx.drawImage(gr,0,0);
 
   // next gate
-  if(state==='play'){
+  if(state==='play'&&!FREE){
     const i=(next*CP)%N,p=cl[i],q=cl[(i+1)%N],a=Math.atan2(q.y-p.y,q.x-p.x),nx=-Math.sin(a),ny=Math.cos(a),pl=.6+.4*Math.sin(t0*8);
     ctx.shadowColor='#27f0ff';ctx.shadowBlur=24;ctx.strokeStyle=`rgba(39,240,255,${pl})`;ctx.lineWidth=6;
     ctx.beginPath();ctx.moveTo(p.x+nx*(HW+8),p.y+ny*(HW+8));ctx.lineTo(p.x-nx*(HW+8),p.y-ny*(HW+8));ctx.stroke();
@@ -549,6 +611,12 @@ function render(dt,sp){
     ctx.fillStyle='#ff7a1a';ctx.beginPath();ctx.arc(0,0,3.5,0,7);ctx.fill();
     ctx.restore();
   }
+  for(const p of pillars){
+    ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(p.x+5,p.y+7,p.r+2,0,7);ctx.fill();
+    ctx.fillStyle='#2d3050';ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill();
+    ctx.strokeStyle='#ff2e93';ctx.lineWidth=5;ctx.shadowColor='#ff2e93';ctx.shadowBlur=12;ctx.beginPath();ctx.arc(p.x,p.y,p.r-2,0,7);ctx.stroke();ctx.shadowBlur=0;
+    ctx.fillStyle='#e8eaff';ctx.beginPath();ctx.arc(p.x,p.y,p.r*.4,0,7);ctx.fill();
+  }
   drawCar();
   // floating texts
   ctx.font='800 24px Vazirmatn,Tahoma';ctx.textAlign='center';
@@ -559,13 +627,19 @@ function render(dt,sp){
   ctx.restore();
 
   // minimap
-  const mx=62,my=Math.max(120,H*.2)+40,ms=.052;
+  const mx=62,my=Math.max(120,H*.2)+40,ms=FREE?.04:.052;
   ctx.save();ctx.translate(mx,my);
   ctx.fillStyle='rgba(8,8,22,.5)';ctx.beginPath();ctx.arc(0,0,58,0,7);ctx.fill();
+  if(FREE){
+    ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2;ctx.strokeRect(-(C-80)*ms,-(C-80)*ms,(C-80)*2*ms,(C-80)*2*ms);
+    ctx.fillStyle='rgba(255,122,26,.8)';for(const c of cones){ctx.fillRect((c.x-C)*ms-1,(c.y-C)*ms-1,2,2)}
+    ctx.fillStyle='#e8eaff';for(const p of pillars){ctx.beginPath();ctx.arc((p.x-C)*ms,(p.y-C)*ms,2.6,0,7);ctx.fill()}
+  }else{
   ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=6;ctx.lineJoin='round';ctx.beginPath();
   for(let i=0;i<N;i+=4){const x=(cl[i].x-C)*ms,y=(cl[i].y-C)*ms;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}
   ctx.closePath();ctx.stroke();
   const gi=(next*CP)%N;ctx.fillStyle='#27f0ff';ctx.beginPath();ctx.arc((cl[gi].x-C)*ms,(cl[gi].y-C)*ms,4,0,7);ctx.fill();
+  }
   ctx.fillStyle='#ff2e93';ctx.beginPath();ctx.arc((car.x-C)*ms,(car.y-C)*ms,4.5,0,7);ctx.fill();
   ctx.restore();
 
@@ -585,8 +659,8 @@ function render(dt,sp){
 const AD_CONFIG={
   imgDir:'',       // پوشه‌ی عکس بنرها؛ خالی یعنی کنار index.html (مثلاً 'ads/' برای پوشه‌ی جدا). برای آدرس کامل یا آدرس شروع‌شده با / اضافه نمی‌شود
   brand:'elexify', // نام برند که روی همه‌ی بنرها نمایش داده می‌شود (هر تبلیغ می‌تواند با فیلد brand آن را عوض کند)
-  firstDelay:60,  // اولین بنر چند ثانیه بعد از شروع بازی
-  interval:60,    // فاصله‌ی بنرهای بعدی (حتی اگر بنر قبلی بسته نشده باشد)
+  firstDelay:10,  // اولین بنر چند ثانیه بعد از شروع بازی
+  interval:15,    // فاصله‌ی بنرهای بعدی (حتی اگر بنر قبلی بسته نشده باشد)
   autoHide:0       // بستن خودکار بعد از N ثانیه؛ 0 یعنی تا بسته‌شدن توسط کاربر یا آمدن بنر بعدی بماند
 };
 const ADS = [
@@ -657,16 +731,25 @@ function loop(now){
 }
 /* ---------- Track selection ---------- */
 function setTrack(i){
-  TK=i;const T=TRACKS[i];HW=T.hw;TH=T.th;cl.length=0;
-  for(let k=0;k<N;k++){const p=T.fn(k/N*Math.PI*2+T.ph);cl.push({x:C+p[0],y:C+p[1]})}
+  TK=i;const T=TRACKS[i];FREE=!!T.free;document.body.classList.toggle('free',FREE);HW=T.hw;TH=T.th;cl.length=0;
+  if(!FREE)for(let k=0;k<N;k++){const p=T.fn(k/N*Math.PI*2+T.ph);cl.push({x:C+p[0],y:C+p[1]})}
   buildCones();best=loadBest(i);$('bs').textContent='رکورد: '+NF(best);
   reset();refreshMenu();refreshLB();
 }
 function refreshMenu(){
-  TRACKS.forEach((T,i)=>{T.btn.classList.toggle('on',i===TK);T.bestEl.textContent='رکورد: '+NF(loadBest(i))});
+  TRACKS.forEach((T,i)=>{T.btn.classList.toggle('on',i===TK);T.bestEl.textContent=T.free?'بدون امتیاز':'رکورد: '+NF(loadBest(i))});
   $('tkDesc').textContent=TRACKS[TK].desc;
 }
 function drawPreview(c,T){
+  if(T.free){
+    const x=c.getContext('2d'),d=genFree(),s=(c.height-20)/(WS-160),ox=c.width/2-C*s,oy=c.height/2-C*s;
+    x.fillStyle=T.th.grass;x.fillRect(0,0,c.width,c.height);
+    x.strokeStyle=T.th.k2;x.lineWidth=3;x.strokeRect(80*s+ox,80*s+oy,(WS-160)*s,(WS-160)*s);
+    x.fillStyle='#ff7a1a';d.cones.forEach(q=>x.fillRect(q.x*s+ox-1,q.y*s+oy-1,2.5,2.5));
+    x.fillStyle='#ff2e93';d.pillars.forEach(q=>{x.beginPath();x.arc(q.x*s+ox,q.y*s+oy,3,0,7);x.fill()});
+    x.fillStyle='#ffd23f';x.beginPath();x.arc(C*s+ox,(C+470)*s+oy,4,0,7);x.fill();
+    return;
+  }
   const x=c.getContext('2d'),pts=[];
   for(let k=0;k<90;k++)pts.push(T.fn(k/90*Math.PI*2+T.ph));
   let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
@@ -1384,7 +1467,9 @@ async function renderLB(el,game){
 }
 function refreshLB(){
   if(!mode)return;
-  renderLB($({drift:'lbDrift',stack:'lbStack',flip:'lbFlip',peng:'lbPeng'}[mode]),gameKey());
+  const el=$({drift:'lbDrift',stack:'lbStack',flip:'lbFlip',peng:'lbPeng'}[mode]);
+  if(mode==='drift'){el.style.display=FREE?'none':'';if(FREE)return}   // مپ آزاد: بدون جدول رکورد
+  renderLB(el,gameKey());
 }
 async function submitScore(sc){
   const g=gameKey();sc=Math.round(sc);
